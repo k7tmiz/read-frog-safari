@@ -28,13 +28,13 @@ Without `SAFARI_TEAM_ID`, the script creates an unsigned development build. Safa
 
 `.github/workflows/release-safari.yml` builds and publishes the Safari app on a GitHub-hosted macOS runner, so no local Xcode install or manual upload is needed. Start it from **Actions → Release Safari → Run workflow**:
 
-| Input     | Meaning                                                                 |
-| --------- | ----------------------------------------------------------------------- |
-| `version` | Exact `X.Y.Z` to release. Leave empty to bump `package.json` instead.   |
+| Input     | Meaning                                                                  |
+| --------- | ------------------------------------------------------------------------ |
+| `version` | Exact `X.Y.Z` to release. Leave empty to bump `package.json` instead.    |
 | `preview` | Preview number: `2` produces `safari-v1.55.0-preview.2`. Empty = stable. |
 | `bump`    | `patch` / `minor` / `major` / `none`, used only when `version` is empty. |
 | `publish` | Off builds and uploads a workflow artifact without tagging or releasing. |
-| `draft`   | Publishes the release as a draft.                                       |
+| `draft`   | Publishes the release as a draft.                                        |
 
 A publishing run builds the app, commits the version bump, creates the `safari-v*` tag, and attaches `Read-Frog-Safari-<version>.zip` plus its SHA-256 to the release. Release notes list the commits since the previous Safari tag and repeat the install steps.
 

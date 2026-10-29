@@ -2,7 +2,7 @@
 import type { FloatingButtonConfig } from "@/types/config/floating-button"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { atom, createStore, Provider } from "jotai"
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 import { configFieldsAtomMap } from "@/utils/atoms/config"
 import { sendMessage } from "@/utils/message"
 import FloatingButton from ".."
@@ -74,8 +74,6 @@ vi.mock("@/components/ui/base-ui/toast", () => ({
 }))
 
 beforeAll(() => {
-  vi.stubEnv("BROWSER", "chrome")
-
   class ResizeObserverMock {
     observe() {}
     unobserve() {}
@@ -85,8 +83,13 @@ beforeAll(() => {
   vi.stubGlobal("ResizeObserver", ResizeObserverMock)
 })
 
+beforeEach(() => {
+  vi.stubEnv("BROWSER", "chrome")
+})
+
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   vi.restoreAllMocks()
   vi.mocked(sendMessage).mockReset()
   toastAddMock.mockReset()
@@ -316,6 +319,36 @@ describe("floatingButton controls", () => {
     })
 
     expect(sendMessage).toHaveBeenCalledWith("toggleSidePanel", undefined)
+  })
+
+  it("falls back to page translation on Safari, which has no side panel", () => {
+    vi.stubEnv("BROWSER", "safari")
+    vi.useFakeTimers()
+    renderFloatingButton({ clickAction: "panel" })
+
+    const mainButton = getMainButton()
+
+    fireEvent.pointerDown(mainButton, {
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 900,
+      clientY: 500,
+    })
+    vi.advanceTimersByTime(349)
+    fireEvent.pointerUp(mainButton, {
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 900,
+      clientY: 500,
+    })
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      "tryToSetEnablePageTranslationOnContentScript",
+      expect.objectContaining({ enabled: true }),
+    )
+    expect(sendMessage).not.toHaveBeenCalledWith("toggleSidePanel", undefined)
   })
 
   it("places feedback after settings and opens a localized Featurebase URL with safe metadata", () => {

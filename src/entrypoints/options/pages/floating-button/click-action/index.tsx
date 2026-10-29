@@ -21,14 +21,22 @@ import { ConfigSection } from "../../../components/config-section"
 export function ClickActionSection() {
   const [floatingButton, setFloatingButton] = useAtom(configFieldsAtomMap.floatingButton)
 
+  // Safari has no sidePanel API and the Safari manifest drops the panel, so the
+  // panel action would be a dead click there.
+  const supportsSidePanel = import.meta.env.BROWSER !== "safari"
+
   // Resolved at render (not module scope) so labels follow a runtime UI-language switch.
   const actions = [
+    ...(supportsSidePanel
+      ? [
+          {
+            value: "panel" as const,
+            label: i18n.t("options.floatingButton.clickAction.panel"),
+          },
+        ]
+      : []),
     {
-      value: "panel",
-      label: i18n.t("options.floatingButton.clickAction.panel"),
-    },
-    {
-      value: "translate",
+      value: "translate" as const,
       label: i18n.t("options.floatingButton.clickAction.translate"),
     },
   ] satisfies Array<{ value: FloatingButtonClickAction; label: string }>
@@ -41,7 +49,7 @@ export function ClickActionSection() {
       <ConfigItem description={i18n.t("options.floatingButton.clickAction.description")}>
         <Select
           items={actions}
-          value={floatingButton.clickAction}
+          value={supportsSidePanel ? floatingButton.clickAction : "translate"}
           onValueChange={(value) => {
             const parsedValue = floatingButtonClickActionSchema.safeParse(value)
             if (!parsedValue.success) return

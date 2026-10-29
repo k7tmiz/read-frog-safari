@@ -185,7 +185,14 @@ export default function FloatingButton() {
   }, [isFullscreen, setIsDraggingButton])
 
   const handleFloatingButtonClick = () => {
-    if (floatingButton.clickAction === "translate") {
+    // Safari ships without the side panel, so a config saved on Chrome still
+    // gets the translate action instead of a click that silently does nothing.
+    const clickAction =
+      import.meta.env.BROWSER === "safari" && floatingButton.clickAction === "panel"
+        ? "translate"
+        : floatingButton.clickAction
+
+    if (clickAction === "translate") {
       const nextEnabled = !translationState.enabled
       void sendMessage("tryToSetEnablePageTranslationOnContentScript", {
         enabled: nextEnabled,
