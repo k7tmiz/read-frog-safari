@@ -25,6 +25,11 @@ export const ACCOUNT_ORIGIN_PATTERNS = [
 ]
 
 export async function hasAccountHostPermission(): Promise<boolean> {
+  // Safari account requests run through the containing app's native handler or
+  // the official-website tab transport, neither of which reads extension host
+  // permissions. Reporting a missing permission there would dead-end sign-in
+  // behind a prompt Safari cannot grant.
+  if (import.meta.env.BROWSER === "safari") return true
   try {
     return await browser.permissions.contains({ origins: ACCOUNT_ORIGIN_PATTERNS })
   } catch (error) {
@@ -41,5 +46,6 @@ export async function hasAccountHostPermission(): Promise<boolean> {
  * Resolves false when the user dismisses the browser's prompt.
  */
 export async function requestAccountHostPermission(): Promise<boolean> {
+  if (import.meta.env.BROWSER === "safari") return true
   return await browser.permissions.request({ origins: ACCOUNT_ORIGIN_PATTERNS })
 }

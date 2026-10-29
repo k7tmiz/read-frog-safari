@@ -235,7 +235,7 @@ jobs:
 
           {
             echo "## Read Frog Safari $VERSION"
-            if [[ -n "$PREVIEW" ]]; then echo; echo "_Preview $PREVIEW_"; fi
+            if [[ -n "$PREVIEW" ]]; then echo; echo "_Preview ${PREVIEW}_"; fi
             echo
             echo "Built from \`$GITHUB_SHA\` by GitHub Actions on macOS."
             echo
