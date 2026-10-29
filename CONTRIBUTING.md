@@ -1,3 +1,14 @@
+# Contributing
+
+This repository is a personal fork that packages Read Frog for Safari on macOS. It does not accept
+external pull requests, and issues are disabled. Bug reports and feature requests for the extension
+itself belong to the [upstream project](https://github.com/mengxi-ream/read-frog).
+
+The terms below are inherited from upstream and continue to apply to any contribution that is
+nevertheless submitted here.
+
+---
+
 # Contributing to ReadFrog
 
 Thank you for your interest in contributing!

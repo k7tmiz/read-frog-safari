@@ -1,5 +1,10 @@
 # Read Frog for Safari on macOS
 
+Technical companion to the [root README](../README.md): what the Safari port changes, how to build
+and package it, how releases are signed, and what to verify before shipping.
+
+## Build the extension
+
 Build the extension from source with the repository's pnpm and Node versions:
 
 ```sh
@@ -12,17 +17,37 @@ The result is `.output/safari-mv3`. The build checks that its entry resources ex
 
 ## Create the macOS app
 
-Install full Xcode, open it once to finish setup, and select it with `DEVELOPER_DIR` when your active developer directory points to Command Line Tools. For a signed local build, use a development team already configured in Xcode:
+Install full Xcode, open it once to finish setup, and select it with `DEVELOPER_DIR` when your active developer directory points to Command Line Tools.
+
+Safari only lists extensions whose host app carries an Apple-issued signature, so the signing mode decides whether the build is usable:
+
+| `SAFARI_SIGNING`  | Result                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `identity`        | Signs with an Apple Development certificate and **no provisioning profile**. What releases use; Safari lists it, and there is no seven-day profile expiry.   |
+| `adhoc`           | Local fallback. The app runs, but Safari hides the extension unless **Develop → Allow Unsigned Extensions** is enabled, which resets on every Safari launch. |
+| `auto` / `manual` | Delegates to Xcode signing. Needs `SAFARI_TEAM_ID`, and `manual` also needs `SAFARI_PROFILE_SPECIFIER`.                                                      |
 
 ```sh
+# Sign with a certificate already in the login keychain
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-SAFARI_TEAM_ID=YOUR_TEAM_ID \
+SAFARI_SIGNING=identity \
+SAFARI_SIGN_IDENTITY="Apple Development: you@example.com (XXXXXXXXXX)" \
+pnpm package:safari
+
+# Ad-hoc, for a quick local check only
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+SAFARI_SIGNING=adhoc \
 pnpm package:safari
 ```
 
-The app is `.safari/DerivedData/Build/Products/Release/Read Frog Safari.app`. Copy it into Applications, open it, and enable Read Frog in Safari's Extensions settings. Grant access to the websites you want to translate. Keep the same `SAFARI_BUNDLE_ID` across updates; the default is `app.readfrog.safari.local`. Increase `SAFARI_BUILD_NUMBER` for each installed update. Export your configuration before replacing a local development app: uninstalling or unregistering an extension can reset its local storage, including sign-in state.
+A personal-team Apple Development certificate works and is valid for a year. Signing it without a profile avoids the seven-day expiry that personal-team provisioning profiles carry. The machine must also have the **WWDR G3 intermediate** installed — without it, `security find-identity -p codesigning` reports zero valid identities even though the certificate is present:
 
-Without `SAFARI_TEAM_ID`, the script creates an unsigned development build. Safari requires its developer setting for unsigned extensions in that case. Signed local development and App Store distribution have different requirements; this script does not publish an App Store release.
+```sh
+curl -fsSL -o /tmp/AppleWWDRCAG3.cer https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+security add-certificates -k ~/Library/Keychains/login.keychain-db /tmp/AppleWWDRCAG3.cer
+```
+
+The app is `.safari/DerivedData/Build/Products/Release/Read Frog Safari.app`. Copy it into Applications, open it, and enable Read Frog in Safari's Extensions settings. Grant access to the websites you want to translate. Keep the same `SAFARI_BUNDLE_ID` across updates; the default is `app.readfrog.safari.local`. Increase `SAFARI_BUILD_NUMBER` for each installed update. Export your configuration before replacing a local development app: uninstalling or unregistering an extension can reset its local storage, including sign-in state.
 
 ## Release from GitHub Actions
 
@@ -38,18 +63,19 @@ Without `SAFARI_TEAM_ID`, the script creates an unsigned development build. Safa
 
 A publishing run builds the app, commits the version bump, creates the `safari-v*` tag, and attaches `Read-Frog-Safari-<version>.zip` plus its SHA-256 to the release. Release notes list the commits since the previous Safari tag and repeat the install steps.
 
-Signing is optional. With no secrets the app is ad-hoc signed with the converter's entitlements: it installs and runs, but Gatekeeper asks for a right-click → Open and Safari may need **Develop → Allow Unsigned Extensions**. For a normal development-signed build, add these repository secrets:
+Signing is driven by three repository secrets. With all three the build is signed with the Apple Development certificate and Safari lists the extension; with none it falls back to ad-hoc and Safari hides it:
 
 - `SAFARI_CERT_P12` — base64 of an Apple Development `.p12`
 - `SAFARI_CERT_PASSWORD` — password for that `.p12`
 - `SAFARI_TEAM_ID` — Apple Developer team ID
-- `SAFARI_PROVISIONING_PROFILE` — base64 of the matching `.mobileprovision`
+
+No provisioning profile is used, which is what keeps personal-team certificates from expiring after seven days.
 
 Optional build variables: repository variable `WXT_GOOGLE_CLIENT_ID` (or secret of the same name) enables Google sign-in and Google Drive; `SAFARI_BUNDLE_ID` overrides the default `app.readfrog.safari.local`. Keep the bundle ID stable across releases or Safari treats each build as a new extension and drops its stored configuration.
 
 Workflows copied into a fork start disabled: open **Actions** once and approve running them. The upstream `Release Extension` workflow can be disabled from the Actions tab; it only publishes Chrome, Edge and Firefox zips and conflicts with the Safari release numbering.
 
-The packaging script fixes the Xcode 27 converter's inconsistent containing-app identifier, keeps app and extension versions aligned with the manifest, and defaults the macOS deployment target to 14.0. Override `SAFARI_MACOS_TARGET` if needed. Runtime verification has been performed on Safari 27/macOS 27; earlier versions and iOS are not certified by this work.
+The packaging script pins the bundle identifiers the Xcode 27 converter rewrites, re-adds the entitlements that converter no longer emits, keeps app and extension versions aligned with the manifest, and defaults the macOS deployment target to 14.0. Override `SAFARI_MACOS_TARGET` if needed. Runtime verification has been performed on Safari 27/macOS 27; earlier versions and iOS are not certified by this work.
 
 ## Safari behavior
 

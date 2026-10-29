@@ -10,6 +10,19 @@ upstream project directly.
 - `upstream` — `mengxi-ream/read-frog`. Source of feature updates.
 - Safari release tags look like `safari-v1.54.2-preview.2`, separate from upstream `v*` tags.
 
+## Documentation
+
+| File                         | Owner     | Notes                                                                                                                                              |
+| ---------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `README.md`                  | this fork | Safari install, build and release overview. Upstream rewrites it often; keep this fork's version and fold in any upstream fact that still applies. |
+| `readmes/README.safari.md`   | this fork | Technical account of the port: behaviour, transports, packaging, signing.                                                                          |
+| `AGENTS.md`                  | this fork | This file.                                                                                                                                         |
+| `readmes/README.<locale>.md` | upstream  | Product docs for other languages; leave untouched.                                                                                                 |
+| `SOURCE_CODE_REVIEW.md`      | upstream  | Store-review build notes for the Firefox zip; not used by this fork.                                                                               |
+
+When behaviour changes, update the file that owns it rather than adding a fourth explanation. The
+root README is the user-facing summary; `README.safari.md` is the deep dive.
+
 ## Syncing upstream
 
 ```sh
@@ -23,6 +36,7 @@ Conflicts concentrate in the files the port touches:
   structure and re-route playback through Safari's `WebAudioPlaybackController`.
 - `src/utils/orpc/background-client.ts` — keep both upstream's header builder and `safariApiFetch`.
 - `wxt.config.ts` — keep both the Safari manifest hook and upstream's build hooks.
+- `README.md` — this fork owns it; keep the Safari version.
 
 After merging, run the full validation below before pushing. Do not drop a Safari branch of a
 conflict just to make the merge apply.
