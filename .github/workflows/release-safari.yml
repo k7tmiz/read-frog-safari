@@ -293,6 +293,7 @@ jobs:
           title="Read Frog Safari $VERSION"
           if [[ -n "$PREVIEW" ]]; then title="$title (Preview $PREVIEW)"; fi
           args=(--title "$title" --notes-file release-notes.md --verify-tag)
+          if [[ -n "$PREVIEW" ]]; then args+=(--prerelease); fi
           if [[ "${{ inputs.draft }}" == "true" ]]; then args+=(--draft); fi
           gh release create "$TAG" "$ZIP" "$ZIP.sha256" "${args[@]}"
 
