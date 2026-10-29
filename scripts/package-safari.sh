@@ -22,7 +22,9 @@ python3 scripts/fix-safari-project.py "$project_root/$app_name" "$bundle_id"
 
 signing_mode="${SAFARI_SIGNING:-}"
 if [[ -z "$signing_mode" ]]; then
-  if [[ -n "${SAFARI_TEAM_ID:-}" ]]; then signing_mode=auto; else signing_mode=none; fi
+  if [[ -n "${SAFARI_SIGN_IDENTITY:-}" ]]; then signing_mode=identity
+  elif [[ -n "${SAFARI_TEAM_ID:-}" ]]; then signing_mode=auto
+  else signing_mode=none; fi
 fi
 
 signing=(CODE_SIGNING_ALLOWED=NO)
@@ -39,9 +41,16 @@ case "$signing_mode" in
       DEVELOPMENT_TEAM="$SAFARI_TEAM_ID"
       PROVISIONING_PROFILE_SPECIFIER="$SAFARI_PROFILE_SPECIFIER")
     ;;
+  identity)
+    # An Apple Development certificate without a provisioning profile, which is
+    # what the Safari port's preview builds use: Safari only lists extensions
+    # from Apple-signed host apps, and a profile would add a 7-day expiry.
+    : "${SAFARI_SIGN_IDENTITY:?SAFARI_SIGNING=identity needs SAFARI_SIGN_IDENTITY}"
+    ;;
   adhoc | none) ;;
   *)
-    printf 'Unknown SAFARI_SIGNING=%s (expected auto, manual, adhoc or none)\n' "$signing_mode" >&2
+    printf 'Unknown SAFARI_SIGNING=%s (expected auto, manual, identity, adhoc or none)\n' \
+      "$signing_mode" >&2
     exit 2
     ;;
 esac
@@ -54,28 +63,33 @@ xcodebuild -project "$project_root/$app_name/$app_name.xcodeproj" \
   MACOSX_DEPLOYMENT_TARGET="${SAFARI_MACOS_TARGET:-14.0}" "${signing[@]}" build
 app_path="$PWD/.safari/DerivedData/Build/Products/Release/$app_name.app"
 
-if [[ "$signing_mode" == "adhoc" ]]; then
-  # CI has no Apple identity. Ad-hoc signing with the converter's entitlements
-  # keeps App Sandbox intact, and Gatekeeper reports an unidentified developer
-  # instead of a damaged app.
-  app_entitlements=$(find "$project_root/$app_name" -type f -name "*.entitlements" \
-    ! -name "*Extension*" | head -n1 || true)
-  extension_entitlements=$(find "$project_root/$app_name" -type f -name "*.entitlements" \
-    -name "*Extension*" | head -n1 || true)
+# The converter writes one entitlements file per target. Signing with them keeps
+# App Sandbox whether the signature is ad-hoc or a developer certificate.
+app_entitlements=$(find "$project_root/$app_name" -type f -name "*.entitlements" \
+  ! -name "*Extension*" | head -n1 || true)
+extension_entitlements=$(find "$project_root/$app_name" -type f -name "*.entitlements" \
+  -name "*Extension*" | head -n1 || true)
 
+sign_target() {
+  local target="$1" entitlements="$2"
+  local args=(--force --sign "$sign_identity" --timestamp=none)
+  [[ -n "$entitlements" ]] && args+=(--entitlements "$entitlements")
+  codesign "${args[@]}" "$target"
+}
+
+sign_identity=""
+if [[ "$signing_mode" == "adhoc" ]]; then sign_identity="-"; fi
+if [[ "$signing_mode" == "identity" ]]; then sign_identity="$SAFARI_SIGN_IDENTITY"; fi
+
+if [[ -n "$sign_identity" ]]; then
   for appex in "$app_path"/Contents/PlugIns/*.appex; do
     [[ -e "$appex" ]] || continue
-    adhoc=(--force --sign - --timestamp=none)
-    [[ -n "$extension_entitlements" ]] && adhoc+=(--entitlements "$extension_entitlements")
-    codesign "${adhoc[@]}" "$appex"
+    sign_target "$appex" "$extension_entitlements"
   done
-
-  adhoc=(--force --sign - --timestamp=none)
-  [[ -n "$app_entitlements" ]] && adhoc+=(--entitlements "$app_entitlements")
-  codesign "${adhoc[@]}" "$app_path"
+  sign_target "$app_path" "$app_entitlements"
 fi
 
-if [[ "$signing_mode" == "auto" || "$signing_mode" == "manual" ]]; then
+if [[ "$signing_mode" != "none" ]]; then
   codesign --verify --strict "$app_path"
   for appex in "$app_path"/Contents/PlugIns/*.appex; do
     [[ -e "$appex" ]] || continue
