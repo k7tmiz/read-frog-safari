@@ -24,6 +24,31 @@ The app is `.safari/DerivedData/Build/Products/Release/Read Frog Safari.app`. Co
 
 Without `SAFARI_TEAM_ID`, the script creates an unsigned development build. Safari requires its developer setting for unsigned extensions in that case. Signed local development and App Store distribution have different requirements; this script does not publish an App Store release.
 
+## Release from GitHub Actions
+
+`.github/workflows/release-safari.yml` builds and publishes the Safari app on a GitHub-hosted macOS runner, so no local Xcode install or manual upload is needed. Start it from **Actions → Release Safari → Run workflow**:
+
+| Input     | Meaning                                                                 |
+| --------- | ----------------------------------------------------------------------- |
+| `version` | Exact `X.Y.Z` to release. Leave empty to bump `package.json` instead.   |
+| `preview` | Preview number: `2` produces `safari-v1.55.0-preview.2`. Empty = stable. |
+| `bump`    | `patch` / `minor` / `major` / `none`, used only when `version` is empty. |
+| `publish` | Off builds and uploads a workflow artifact without tagging or releasing. |
+| `draft`   | Publishes the release as a draft.                                       |
+
+A publishing run builds the app, commits the version bump, creates the `safari-v*` tag, and attaches `Read-Frog-Safari-<version>.zip` plus its SHA-256 to the release. Release notes list the commits since the previous Safari tag and repeat the install steps.
+
+Signing is optional. With no secrets the app is ad-hoc signed with the converter's entitlements: it installs and runs, but Gatekeeper asks for a right-click → Open and Safari may need **Develop → Allow Unsigned Extensions**. For a normal development-signed build, add these repository secrets:
+
+- `SAFARI_CERT_P12` — base64 of an Apple Development `.p12`
+- `SAFARI_CERT_PASSWORD` — password for that `.p12`
+- `SAFARI_TEAM_ID` — Apple Developer team ID
+- `SAFARI_PROVISIONING_PROFILE` — base64 of the matching `.mobileprovision`
+
+Optional build variables: repository variable `WXT_GOOGLE_CLIENT_ID` (or secret of the same name) enables Google sign-in and Google Drive; `SAFARI_BUNDLE_ID` overrides the default `app.readfrog.safari.local`. Keep the bundle ID stable across releases or Safari treats each build as a new extension and drops its stored configuration.
+
+Workflows copied into a fork start disabled: open **Actions** once and approve running them. The upstream `Release Extension` workflow can be disabled from the Actions tab; it only publishes Chrome, Edge and Firefox zips and conflicts with the Safari release numbering.
+
 The packaging script fixes the Xcode 27 converter's inconsistent containing-app identifier, keeps app and extension versions aligned with the manifest, and defaults the macOS deployment target to 14.0. Override `SAFARI_MACOS_TARGET` if needed. Runtime verification has been performed on Safari 27/macOS 27; earlier versions and iOS are not certified by this work.
 
 ## Safari behavior

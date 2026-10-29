@@ -1,0 +1,310 @@
+name: Release Safari
+
+# Builds the macOS Safari host app on a GitHub-hosted macOS runner and publishes
+# it as a GitHub Release. Nothing is built or uploaded from a developer machine.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact version to release (e.g. 1.55.0). Empty means bump package.json."
+        required: false
+        type: string
+      preview:
+        description: "Preview number (empty means a stable release), e.g. 2 → safari-v1.55.0-preview.2"
+        required: false
+        type: string
+      bump:
+        description: "Bump applied when version is empty"
+        required: false
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - none
+      publish:
+        description: "Create the GitHub release (off = upload a workflow artifact only)"
+        required: false
+        default: true
+        type: boolean
+      draft:
+        description: "Create the release as a draft"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-safari
+  cancel-in-progress: false
+
+env:
+  HUSKY: "0"
+  SKIP_ENV_VALIDATION: "true"
+  WXT_SKIP_ENV_VALIDATION: "true"
+  SKIP_FREE_API: "true"
+
+jobs:
+  release:
+    name: Build and release Safari app
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Release notes walk back to the previous safari tag.
+          fetch-depth: 0
+
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@v2
+        with:
+          cache: true
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_PREVIEW: ${{ inputs.preview }}
+          INPUT_BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          current=$(node -p "require('./package.json').version")
+
+          if [[ -n "$INPUT_VERSION" ]]; then
+            next="$INPUT_VERSION"
+          elif [[ "$INPUT_BUMP" == "none" ]]; then
+            next="$current"
+          else
+            next=$(node -e '
+              const [major, minor, patch] = process.argv[1].split(".").map(Number)
+              const bump = process.argv[2]
+              const next =
+                bump === "major" ? [major + 1, 0, 0]
+                : bump === "minor" ? [major, minor + 1, 0]
+                : [major, minor, patch + 1]
+              console.log(next.join("."))
+            ' "$current" "$INPUT_BUMP")
+          fi
+
+          if ! [[ "$next" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version '$next' is not a plain X.Y.Z version"
+            exit 1
+          fi
+
+          tag="safari-v$next"
+          if [[ -n "$INPUT_PREVIEW" ]]; then
+            if ! [[ "$INPUT_PREVIEW" =~ ^[0-9]+$ ]]; then
+              echo "::error::Preview must be a number, got '$INPUT_PREVIEW'"
+              exit 1
+            fi
+            tag="$tag-preview.$INPUT_PREVIEW"
+          fi
+
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::Tag $tag already exists; pick another version or preview number"
+            exit 1
+          fi
+
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Resolved $current → $next ($tag)"
+
+      - name: Prepare build environment
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.WXT_GOOGLE_CLIENT_ID || vars.WXT_GOOGLE_CLIENT_ID }}
+          GOOGLE_REDIRECT_URL: ${{ secrets.WXT_GOOGLE_REDIRECT_URL || vars.WXT_GOOGLE_REDIRECT_URL }}
+          POSTHOG_HOST: ${{ secrets.WXT_POSTHOG_HOST || vars.WXT_POSTHOG_HOST }}
+          POSTHOG_API_KEY: ${{ secrets.WXT_POSTHOG_API_KEY || vars.WXT_POSTHOG_API_KEY }}
+          BUNDLE_ID: ${{ vars.SAFARI_BUNDLE_ID }}
+        run: |
+          set -euo pipefail
+          # An empty variable is not the same as an unset one: the env schema
+          # rejects "" but falls back to defaults when the key is absent.
+          publish_env() {
+            local name="$1" value="$2"
+            if [[ -n "$value" ]]; then printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"; fi
+          }
+          publish_env WXT_GOOGLE_CLIENT_ID "$GOOGLE_CLIENT_ID"
+          publish_env WXT_GOOGLE_REDIRECT_URL "$GOOGLE_REDIRECT_URL"
+          publish_env WXT_POSTHOG_HOST "$POSTHOG_HOST"
+          publish_env WXT_POSTHOG_API_KEY "$POSTHOG_API_KEY"
+          publish_env SAFARI_BUNDLE_ID "$BUNDLE_ID"
+
+          if [[ -z "$GOOGLE_CLIENT_ID" ]]; then
+            echo "::warning::WXT_GOOGLE_CLIENT_ID is not configured; Google sign-in will not work in this build."
+          fi
+          echo "SAFARI_BUILD_NUMBER=${{ github.run_number }}" >> "$GITHUB_ENV"
+
+      - name: Prepare signing
+        env:
+          CERT_P12: ${{ secrets.SAFARI_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.SAFARI_CERT_PASSWORD }}
+          TEAM_ID: ${{ secrets.SAFARI_TEAM_ID }}
+          PROFILE_B64: ${{ secrets.SAFARI_PROVISIONING_PROFILE }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CERT_P12" ]]; then
+            echo "No SAFARI_CERT_P12 secret: building an ad-hoc signed app."
+            echo "SAFARI_SIGNING=adhoc" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          if [[ -z "$TEAM_ID" || -z "$PROFILE_B64" ]]; then
+            echo "::error::SAFARI_CERT_P12 needs SAFARI_TEAM_ID and SAFARI_PROVISIONING_PROFILE as well"
+            exit 1
+          fi
+
+          profile_dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$profile_dir"
+          printf '%s' "$PROFILE_B64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$profile_dir/ci.mobileprovision"
+          profile_name=$(security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" \
+            | plutil -extract Name raw -)
+
+          security create-keychain -p "" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "" build.keychain
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k build.keychain -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" build.keychain
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+
+          echo "SAFARI_SIGNING=manual" >> "$GITHUB_ENV"
+          echo "SAFARI_TEAM_ID=$TEAM_ID" >> "$GITHUB_ENV"
+          echo "SAFARI_PROFILE_SPECIFIER=$profile_name" >> "$GITHUB_ENV"
+
+      - name: Build Safari app
+        run: pnpm package:safari
+
+      - name: Package app
+        id: package
+        run: |
+          set -euo pipefail
+          app=".safari/DerivedData/Build/Products/Release/Read Frog Safari.app"
+          [[ -d "$app" ]] || { echo "::error::Build output missing at $app"; exit 1; }
+
+          version="${{ steps.version.outputs.version }}"
+          preview="${{ inputs.preview }}"
+          name="Read-Frog-Safari-$version"
+          if [[ -n "$preview" ]]; then name="$name-preview.$preview"; fi
+
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/$name.zip"
+          (cd dist && shasum -a 256 "$name.zip" > "$name.zip.sha256")
+
+          echo "zip=dist/$name.zip" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          du -h "dist/$name.zip"
+
+      - name: Write release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PREVIEW: ${{ inputs.preview }}
+        run: |
+          set -euo pipefail
+          previous=$(git tag --list 'safari-v*' --sort=-v:refname | head -n1 || true)
+          if [[ -n "$previous" ]]; then range="$previous..HEAD"; else range="-40"; fi
+          changes=$(git log --no-merges --pretty='- %s (%h)' "$range")
+          if [[ -z "$changes" ]]; then changes="- No changes since the previous Safari release."; fi
+
+          {
+            echo "## Read Frog Safari $VERSION"
+            if [[ -n "$PREVIEW" ]]; then echo; echo "_Preview $PREVIEW_"; fi
+            echo
+            echo "Built from \`$GITHUB_SHA\` by GitHub Actions on macOS."
+            echo
+            echo "### Install"
+            echo
+            echo "1. Quit Safari, then unzip and replace \`Read Frog Safari.app\` in Applications."
+            echo "2. Keep the same bundle ID when replacing: \`app.readfrog.safari.local\`."
+            echo "3. Open the app once, then enable Read Frog in Safari's Extensions settings."
+            echo
+            echo "Do not uninstall the old extension first: removing it can reset its local storage, including sign-in state. If macOS blocks this unsigned development build, right-click the app and choose Open, or run:"
+            echo
+            echo '```sh'
+            echo 'xattr -dr com.apple.quarantine "/Applications/Read Frog Safari.app"'
+            echo '```'
+            echo
+            echo "### Changes"
+            echo
+            printf '%s\n' "$changes"
+            echo
+            echo "### Checksums"
+            echo
+            echo '```'
+            cat "dist/$(basename "${{ steps.package.outputs.zip }}").sha256"
+            echo '```'
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Commit version bump and tag
+        if: inputs.publish
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$VERSION" != "${{ steps.version.outputs.current }}" ]]; then
+            node -e '
+              const fs = require("node:fs")
+              const file = "package.json"
+              const pkg = JSON.parse(fs.readFileSync(file, "utf8"))
+              pkg.version = process.argv[1]
+              fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n")
+            ' "$VERSION"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json
+            git commit -m "chore(release): $TAG"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
+          git tag -a "$TAG" -m "Read Frog Safari $VERSION"
+          git push origin "$TAG"
+
+      - name: Publish release
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PREVIEW: ${{ inputs.preview }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          set -euo pipefail
+          title="Read Frog Safari $VERSION"
+          if [[ -n "$PREVIEW" ]]; then title="$title (Preview $PREVIEW)"; fi
+          args=(--title "$title" --notes-file release-notes.md --verify-tag)
+          if [[ "${{ inputs.draft }}" == "true" ]]; then args+=(--draft); fi
+          gh release create "$TAG" "$ZIP" "$ZIP.sha256" "${args[@]}"
+
+      - name: Upload build artifact
+        if: ${{ !inputs.publish }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            ${{ steps.package.outputs.zip }}
+            ${{ steps.package.outputs.zip }}.sha256
+          retention-days: 14
+
+      - name: Summary
+        run: |
+          {
+            echo "### Read Frog Safari ${{ steps.version.outputs.version }}"
+            echo
+            echo "- Tag: \`${{ steps.version.outputs.tag }}\`"
+            echo "- Bundle ID: \`${SAFARI_BUNDLE_ID:-app.readfrog.safari.local}\`"
+            echo "- Build number: \`${SAFARI_BUILD_NUMBER}\`"
+            echo "- Signing: \`${SAFARI_SIGNING}\`"
+            echo "- Artifact: \`${{ steps.package.outputs.zip }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
