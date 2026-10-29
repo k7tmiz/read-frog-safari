@@ -70,6 +70,37 @@ app_entitlements=$(find "$project_root/$app_name" -type f -name "*.entitlements"
 extension_entitlements=$(find "$project_root/$app_name" -type f -name "*.entitlements" \
   -name "*Extension*" | head -n1 || true)
 
+# Xcode 27's converter emits no .entitlements files and relies on the
+# ENABLE_APP_SANDBOX build settings instead, which only take effect while Xcode
+# signs the product. Manual signing has to repeat the same entitlements.
+write_entitlements() {
+  local path="$1"
+  shift
+  {
+    printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
+      '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+      '<plist version="1.0"><dict>'
+    local key
+    for key in "$@"; do printf '<key>%s</key><true/>\n' "$key"; done
+    printf '%s\n' '</dict></plist>'
+  } > "$path"
+}
+
+if [[ -z "$app_entitlements" ]]; then
+  app_entitlements="$PWD/.safari/app.entitlements"
+  write_entitlements "$app_entitlements" \
+    com.apple.security.app-sandbox \
+    com.apple.security.files.user-selected.read-only \
+    com.apple.security.network.client
+fi
+if [[ -z "$extension_entitlements" ]]; then
+  extension_entitlements="$PWD/.safari/extension.entitlements"
+  write_entitlements "$extension_entitlements" \
+    com.apple.security.app-sandbox \
+    com.apple.security.files.user-selected.read-only \
+    com.apple.security.network.client
+fi
+
 sign_target() {
   local target="$1" entitlements="$2"
   local args=(--force --sign "$sign_identity" --timestamp=none)

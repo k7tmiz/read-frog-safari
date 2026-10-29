@@ -11,34 +11,41 @@ if not re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", bundle_id):
 pbxproj = next(project.glob("*.xcodeproj/project.pbxproj"))
 text = pbxproj.read_text()
 
-# The converter's target layout changes between Xcode releases: Debug and
-# Release alone already account for two settings per target, and newer versions
-# add targets. Rewrite relative to the app identifier the converter chose so
-# extra targets keep distinct identifiers instead of collapsing into one.
 original_ids = sorted(set(re.findall(r'PRODUCT_BUNDLE_IDENTIFIER = "?([^";]+)"?;', text)))
 if not original_ids:
     raise SystemExit("No PRODUCT_BUNDLE_IDENTIFIER settings found in the converter project")
 
-# The app identifier is the longest prefix of the extension identifier, so a
-# shorter test or helper target cannot be mistaken for the containing app.
+# Xcode 27's converter can rewrite the containing app identifier independently of
+# the extension: with --bundle-identifier app.readfrog.safari.local it emits
+# app.readfrog.safari.Read-Frog-Safari for the app but keeps
+# app.readfrog.safari.local.Extension. Anchor on the extension identifier, which
+# the converter does respect, and derive the app identifier from it.
 extension_ids = [candidate for candidate in original_ids if candidate.endswith(".Extension")]
+extension_id = extension_ids[0] if extension_ids else None
+remaining = [candidate for candidate in original_ids if candidate not in extension_ids]
+
 prefixes = [
-    candidate
-    for candidate in original_ids
-    if any(extension.startswith(f"{candidate}.") for extension in extension_ids)
+    candidate for candidate in remaining if extension_id and extension_id.startswith(f"{candidate}.")
 ]
-base_id = max(prefixes, key=len) if prefixes else min(original_ids, key=len)
+app_id = max(prefixes, key=len) if prefixes else min(remaining, key=len)
 
 
 def remap(old: str) -> str:
-    if old == base_id:
+    if extension_id and old == extension_id:
+        return f"{bundle_id}.Extension"
+    if old == app_id:
         return bundle_id
-    if old.startswith(base_id):
-        return f"{bundle_id}{old[len(base_id):]}"
+    if extension_id and old.startswith(f"{extension_id}."):
+        return f"{bundle_id}.Extension{old[len(extension_id):]}"
+    if old.startswith(f"{app_id}."):
+        return f"{bundle_id}{old[len(app_id):]}"
     return f"{bundle_id}.{old.rsplit('.', 1)[-1]}"
 
 
 mapping = {old: remap(old) for old in original_ids}
+duplicates = {value for value in mapping.values() if list(mapping.values()).count(value) > 1}
+if duplicates:
+    raise SystemExit(f"Bundle identifier rewrite collides: {sorted(duplicates)} ({mapping})")
 
 
 def substitute(match):

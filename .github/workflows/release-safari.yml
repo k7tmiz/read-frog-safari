@@ -186,15 +186,11 @@ jobs:
           # Safari lists extensions from Apple-signed host apps, and a plain
           # "Apple Development" certificate is enough. No provisioning profile:
           # profiles expire after seven days for personal teams.
-          if [[ -n "$TEAM_ID" ]]; then
-            identity=$(security find-identity -v -p codesigning \
-              | grep "Apple Development" | grep "($TEAM_ID)" | head -n1 \
-              | sed -E 's/.*"(.*)".*/\1/' || true)
-          else
-            identity=$(security find-identity -v -p codesigning \
-              | grep "Apple Development" | head -n1 \
-              | sed -E 's/.*"(.*)".*/\1/' || true)
-          fi
+          # The parenthesised suffix of an identity is the certificate ID, not
+          # the team ID, so selecting by team would find nothing.
+          identity=$(security find-identity -v -p codesigning \
+            | grep "Apple Development" | head -n1 \
+            | sed -E 's/.*"(.*)".*/\1/' || true)
           if [[ -z "$identity" ]]; then
             echo "::error::The imported certificate has no usable Apple Development identity"
             security find-identity -v -p codesigning
