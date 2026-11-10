@@ -77,17 +77,21 @@ describe("video subtitles page sections", () => {
   it("writes each switch on its own, leaving the other alone", () => {
     renderInRouter(<PreferenceSection />)
 
-    const [enable, aiSegmentation] = screen.getAllByRole("switch")
+    const [enable, aiSegmentation, pauseOnHover] = screen.getAllByRole("switch")
 
     fireEvent.click(enable!)
     expect(setVideoSubtitlesMock).toHaveBeenCalledWith({ enabled: false })
 
     fireEvent.click(aiSegmentation!)
     expect(setVideoSubtitlesMock).toHaveBeenCalledWith({ aiSegmentation: true })
+
+    expect(pauseOnHover).not.toBeChecked()
+    fireEvent.click(pauseOnHover!)
+    expect(setVideoSubtitlesMock).toHaveBeenCalledWith({ pauseOnHover: true })
   })
 
   it("turns translate-on-open on for one platform only", () => {
-    testState.videoSubtitles!.autoStart = { youtube: true, xcom: false, netflix: false }
+    testState.videoSubtitles!.autoStart.youtube = true
     renderInRouter(<SubtitlesAutoStartPage />)
 
     expect(screen.getByRole("switch", { name: "YouTube" })).toBeChecked()
@@ -98,7 +102,7 @@ describe("video subtitles page sections", () => {
     const update = setVideoSubtitlesMock.mock.lastCall?.[0]
     expect(typeof update).toBe("function")
     expect(typeof update === "function" && update(testState.videoSubtitles!)).toEqual({
-      autoStart: { youtube: true, xcom: true, netflix: false },
+      autoStart: { ...DEFAULT_CONFIG.videoSubtitles.autoStart, youtube: true, xcom: true },
     })
   })
 })

@@ -7,6 +7,7 @@ export type {
   HostedAiCreditPeriodKind,
   HostedAiCreditPoolStatus,
   HostedAiFeature,
+  HostedAiFeatureStatus,
   HostedAiOneTimeCreditStatus,
   HostedAiRecurringCreditStatus,
   HostedAiTierStatus,
@@ -14,12 +15,4 @@ export type {
   HostedAiUpgradePlan,
 } from "@read-frog/api-contract"
 
-/**
- * TODO(2026-11-07): `pools` is optional only because a server that predates it
- * omits it and `getHostedAiPools` falls back to `credits`. Use
- * `HostedAiStatusOutput` as is once that fallback goes
- * (mengxi-ream/read-frog-monorepo#710).
- */
-export type HostedAiStatus = Omit<HostedAiStatusOutput, "pools"> & {
-  pools?: HostedAiStatusOutput["pools"]
-}
+export type HostedAiStatus = HostedAiStatusOutput

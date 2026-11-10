@@ -168,14 +168,15 @@ options:
         videoSubtitles: Video altyazıları
         inputTranslation: Giriş çevirisi
         languageDetection: Dil algılama
+        pdfTranslation: PDF çevirisi
     sponsorCta: Hızlı ve uygun maliyetli yapay zekâ al
-    sponsorCtaJalapenoCloud: GLM 5.2ʼde %50 indirim al
+    sponsorCtaJalapenoCloud: GLM 5.3ʼte %50 indirim al
     setApiKeyWarning:
       message: API anahtarınızı $1 sayfasında ayarlayın
     badges:
       featureCount: $1 özellik
       sponsor: Sponsor
-      sponsorJalapenoCloud: $$2 ücretsiz
+      sponsorJalapenoCloud: $$1 ücretsiz
     dialog:
       title: Yeni sağlayıcı ekle
       groups:
@@ -310,7 +311,7 @@ options:
         noteSuggestion: Not önerileri
       descriptions:
         pageTranslation: Sayfanın tamamını iki dilli ya da değiştirme modunda çevirir.
-        selectionTranslation: Seçim araç çubuğundan, seçtiğiniz metni çevirir.
+        selectionTranslation: "Seçtiğiniz metni çevirir; sözcük notlarının anlamı da buradan gelir."
         inputTranslation: Bir metin kutusuna yazdıklarınızı göndermeden önce çevirir.
         videoSubtitles: Video oynatıcıda görünen altyazıları çevirir.
         noteSuggestion: Seçim çevirisinden sonra Notebase'inize kaydetmeye değer kelimeler önerir.
@@ -548,6 +549,12 @@ options:
     selectionSpeak:
       title: "Seçimi sesli okuma"
       description: "Seçili metni sesli okur. Durdurmak için tekrar basın."
+    selectionAnnotation:
+      title: "Not ekle"
+      description: "Seçili metnin altını çizer ve anlamını satırların arasına yazar."
+    selectionAnnotationMode:
+      title: "Not modu"
+      description: "Araç çubuğunu açmadan not modunu açar veya kapatır. Açıkken seçtiğiniz her metne not eklenir."
     actions:
       title: "AI eylemleri"
       description: "Seçili metin üzerinde bir AI eylemi çalıştırır. Özel eylemlerin, burada atayana kadar kısayolu yoktur."
@@ -620,6 +627,14 @@ options:
     enable:
       title: Seçim araç çubuğunu etkinleştir
       description: Web sayfalarında metin seçtiğinizde araç çubuğunu göstererek hızlı çeviri, seslendirme ve AI eylemleri sunar
+    annotation:
+      title: "Sözcük notları"
+      enable:
+        title: "Etkinleştir"
+        description: "Seçili sözcüğün veya ifadenin altını çizer ve anlamını satırların arasına yazar"
+      provider:
+        title: "Sağlayıcı"
+        description: "Anlamı üretir; Çevir ile aynı ayardır"
     actions:
       title: Eylemler
       translate:
@@ -783,6 +798,8 @@ options:
             unquotedAttributeOutput: Bu öznitelik değerini tırnak içine alın, yoksa değer öznitelikten taşabilir.
             filterIgnored: '"$1" etiketinde filtreler yok sayılır. Önce filtrelenmiş değeri atayın.'
             newlineToBrNotLast: newline_to_br yalnızca bir çıktının son filtresi olarak çalışır.
+            mathFilterNotLast: $1 yalnızca bir çıktının son filtresi olarak çalışır.
+            mathFilterInAttribute: $1 filtresini bir öznitelik değerinin içinde kullanmayın. Çizdiği formüllerdeki tırnaklar özniteliği kapatır.
             tooLong: Bu düzen $1 karakterden uzun ve kaydedilemez.
             fieldNotShown: '"$1" bu düzende gösterilmiyor.'
             reservedFieldName: '"$1" alan adı düzenlerde ayrılmıştır. Alanı yeniden adlandırın.'
@@ -1397,7 +1414,7 @@ options:
       title: Temel ayarlar
       enable:
         title: Video altyazılarını aç
-        description: YouTube, X ve Netflix'te oynatıcı kontrollerine bir çeviri düğmesi ekler.
+        description: YouTube, X, Netflix, Bilibili, Udemy ve edX'te oynatıcı kontrollerine bir çeviri düğmesi ekler.
       autoStart:
         title: Video açılınca çevir
         description: Video yüklenir yüklenmez, düğmeye basmadan altyazıları çevirmeye başlar.
@@ -1407,6 +1424,9 @@ options:
       wordLookupAction:
         title: Sözcük arama eylemi
         description: Altyazıdaki bir sözcüğe tıklandığında çalışan yapay zeka eylemi. Varsayılan sözlüktür; kendi eyleminizi seçebilirsiniz.
+      pauseOnHover:
+        title: Üzerine gelince duraklat
+        description: İşaretçi altyazıların üzerinde bir süre durduğunda videoyu duraklatır, işaretçi ayrılınca oynatmaya devam eder. Bir sözcüğe tıklayıp aramak her zaman duraklatır.
     aiQuota:
       title: Yapay zekâ altyazı kotası
       description: Yapay zeka konuşma tanıma ile her video için doğru altyazı üretir
@@ -1559,6 +1579,19 @@ translation:
   sameLanguage: Kaynak ve hedef diller farklı olmalıdır
   autoModeSameLanguage: Algılanan dil '$1' hedef dille aynı
   extensionContextInvalidated: Uzantı güncellendi. Bu sayfayı yenileyip tekrar deneyin.
+annotation:
+  annotate: "Not ekle"
+  enterMode: "Not modu"
+  exitMode: "Not modundan çık"
+  modeLabel: "Not modu"
+  noTextSelected: "Seçili metin yok"
+  tooLong: "Not eklemek için bir sözcük veya kısa bir ifade seçin"
+  multipleParagraphs: "Not eklemek için tek bir paragraf içinden metin seçin"
+  translatedTextUnsupported: "Çevrilmiş metne not eklenemez"
+  unsupportedPlace: "Buradaki metne not eklenemez"
+  markOnly: "İşaretlendi. Bu satırların arasında anlamı için yer yok."
+  failed: "Anlam alınamadı"
+  remove: "Notu kaldır"
 speak:
   languageDetectionFallback: Yerel dil algılamaya geçildi
   languageDetectionSettingsHint: Ayarlardan kullanılabilir bir LLM veya yerel algılamayı seçin.
@@ -1658,10 +1691,12 @@ subtitles:
   aiSubtitlesHint: Gelişmiş yapay zeka ses tanıma ile doğru altyazılar oluşturulur; resmi altyazı olmadığında da kullanılabilir.
   requestAiSubtitles: Yapay zeka altyazısı iste
   usingAiSubtitles: Yapay zeka altyazısı kullanılıyor
+  settings: Altyazı ayarları
   toggle:
     enabled: Altyazı çevirisi açık
     disabled: Altyazı çevirisi kapalı
   actions:
+    download: Altyazıları indir
     downloadTranslated: Çevrilmiş altyazıları indir
     downloadTranslatedPreparing: Altyazılar hazırlanıyor, uzun videolar daha uzun sürebilir
     downloadTranslatedTranslating: Altyazılar çevriliyor

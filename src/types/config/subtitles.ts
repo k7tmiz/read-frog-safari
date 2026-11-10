@@ -47,10 +47,21 @@ export const subtitlesStyleSchema = z.object({
 })
 
 /** The players subtitles get translated on. */
-export const subtitlesPlatformSchema = z.enum(["youtube", "xcom", "netflix"])
+export const subtitlesPlatformSchema = z.enum([
+  "youtube",
+  "xcom",
+  "netflix",
+  "bilibili",
+  "udemy",
+  "edx",
+])
 
-/** Per platform, whether subtitles start translating as soon as a video loads. */
-export const subtitlesAutoStartSchema = z.record(subtitlesPlatformSchema, z.boolean())
+// Per platform, whether subtitles start as a video loads. `.default()` lets a config stored
+// before a platform was added parse until its migration adds it.
+export const subtitlesAutoStartSchema = z.record(
+  subtitlesPlatformSchema,
+  z.boolean().default(false),
+)
 
 export const subtitlePositionSchema = z.object({
   percent: z.number().min(0).max(100),
@@ -67,6 +78,9 @@ export const videoSubtitlesSchema = z.object({
   // `.default()` is load-bearing: it lets configs stored before this field existed still
   // parse during the upgrade window, before the v115 migration runs.
   wordLookupActionId: z.string().nonempty().default(BUILT_IN_DICTIONARY_ACTION_ID),
+  // Whether resting the pointer on the subtitles pauses the video. `.default()` is
+  // load-bearing for the same reason as above, until the v117 migration runs.
+  pauseOnHover: z.boolean().default(false),
   requestQueueConfig: requestQueueConfigSchema,
   batchQueueConfig: batchQueueConfigSchema,
   customPromptsConfig: subtitleCustomPromptsConfigSchema,

@@ -14,7 +14,8 @@ export const subtitlesHoveredAtom = atom(false)
 
 /**
  * Whether the subtitles hold still, while the pointer is on them or a lookup is
- * open: the video stays paused and the box stays where it is.
+ * open: the box stays where it is. Whether the video pauses too is up to
+ * `useHoldPlayback`, which also weighs the pause-on-hover setting.
  */
 export const subtitlesHeldAtom = atom(
   (get) => get(subtitlesHoveredAtom) || get(wordLookupAtom) !== null,
@@ -50,6 +51,9 @@ export const lookUpAtom = atom(null, (get, set, index: number | null) => {
     cleanSelection: word.text,
     contextText: [cue.text, cue.translation].filter(Boolean).join("\n\n"),
     surface: ANALYTICS_SURFACE.VIDEO_SUBTITLES,
+    // The card reads the video, its link and playing time, when a save starts
+    // (WordLookupCard), where the platform's player can be reached.
+    noteOrigin: null,
     sessionKey: nextSessionKey,
     rerunNonce: 0,
   })

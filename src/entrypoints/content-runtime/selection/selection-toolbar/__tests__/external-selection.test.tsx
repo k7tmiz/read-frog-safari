@@ -29,6 +29,36 @@ vi.mock("../more-menu", () => ({
 }))
 
 // Mock atoms
+// The slot follows its switch in the config, like the real hook.
+vi.mock("../../annotation/provider", async () => {
+  const jotai = await import("jotai")
+  const configAtoms = await import("@/utils/atoms/config")
+  return {
+    useAnnotation: () => {
+      const selectionToolbar = jotai.useAtomValue(configAtoms.configFieldsAtomMap.selectionToolbar)
+      return {
+        enabled: selectionToolbar.enabled && (selectionToolbar.annotation?.enabled ?? false),
+        mode: false,
+        setMode: vi.fn<(mode: boolean) => void>(),
+        count: 0,
+        annotate: vi.fn<() => boolean>(),
+      }
+    },
+  }
+})
+
+vi.mock("../../annotation/toolbar-slot", () => ({
+  AnnotateButton: () => null,
+  AnnotateReveal: () => null,
+  useAnnotateReveal: () => ({
+    open: false,
+    placement: "left",
+    openReveal: vi.fn<() => void>(),
+    scheduleClose: vi.fn<() => void>(),
+    cancelClose: vi.fn<() => void>(),
+  }),
+}))
+
 vi.mock("@/utils/atoms/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/utils/atoms/config")>()
   return {
@@ -142,6 +172,33 @@ describe("selectionToolbar - external selection source", () => {
     await waitFor(() => {
       expect(toolbar).toHaveStyle({ left: "80px", top: "70px" })
     })
+  })
+
+  it("records the book and the selection's CFI as the session's note origin", async () => {
+    window.history.replaceState(null, "", "/ebook/reader")
+    render(<SelectionToolbar />)
+
+    await dispatchExternalOpen({
+      ...EXTERNAL_PAYLOAD,
+      ebookId: "44444444-4444-4444-8444-444444444444",
+      cfi: "epubcfi(/6/8!/4/2/3:12)",
+    })
+    await waitFor(expectToolbarVisible)
+
+    expect(store.get(selectionSessionAtom)?.noteOrigin).toEqual({
+      kind: "ebook",
+      ebookId: "44444444-4444-4444-8444-444444444444",
+      cfi: "epubcfi(/6/8!/4/2/3:12)",
+    })
+  })
+
+  it("records no origin, not the reader page, when an older reader sends no book id", async () => {
+    render(<SelectionToolbar />)
+
+    await dispatchExternalOpen(EXTERNAL_PAYLOAD)
+    await waitFor(expectToolbarVisible)
+
+    expect(store.get(selectionSessionAtom)?.noteOrigin).toBeNull()
   })
 
   it("hides the toolbar and clears the session on the external clear event", async () => {

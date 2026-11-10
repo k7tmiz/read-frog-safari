@@ -8,6 +8,7 @@ import ReactDOM from "react-dom/client"
 import { createShadowRootUi } from "#imports"
 import { ThemeProvider } from "@/components/providers/theme-provider"
 import { TooltipProvider } from "@/components/ui/base-ui/tooltip"
+import { disposeAnnotationController } from "@/utils/annotate"
 import { baseThemeModeAtom } from "@/utils/atoms/theme"
 import { getLocalConfig } from "@/utils/config/storage"
 import { APP_NAME } from "@/utils/constants/app"
@@ -15,6 +16,7 @@ import { SELECTION_UI_CSS } from "@/utils/content-ui-css"
 import { primeGlossaryMatcher } from "@/utils/glossary/active-matcher"
 import { initI18n } from "@/utils/i18n"
 import { LocaleBoundary } from "@/utils/i18n/locale-boundary"
+import { registerBundledIcons } from "@/utils/iconify/bundled-icons"
 import { ensureIconifyBackgroundFetch } from "@/utils/iconify/setup-background-fetch"
 import { ShadowWrapperContext } from "@/utils/react-shadow-host/create-shadow-host"
 import { protectSelectAllShadowRoot } from "@/utils/select-all"
@@ -51,6 +53,7 @@ declare global {
 
 async function mountSelectionUI(ctx: ContentScriptContext) {
   ensureIconifyBackgroundFetch()
+  registerBundledIcons()
 
   const themeMode = await getLocalThemeMode()
 
@@ -59,7 +62,7 @@ async function mountSelectionUI(ctx: ContentScriptContext) {
     position: "overlay",
     anchor: "body",
     css: SELECTION_UI_CSS,
-    onMount: (container, shadow, shadowHost) => {
+    onMount: (container, _shadow, shadowHost) => {
       const wrapper = insertShadowRootUIWrapperInto(container, shadowHost)
       shadowWrapper = wrapper
       protectSelectAllShadowRoot(shadowHost, wrapper)
@@ -73,7 +76,7 @@ async function mountSelectionUI(ctx: ContentScriptContext) {
                 <ThemeProvider container={wrapper}>
                   <TooltipProvider>
                     <LocaleBoundary>
-                      <App uiContainer={container} portalContainer={shadow} />
+                      <App uiContainer={container} portalContainer={wrapper} />
                     </LocaleBoundary>
                   </TooltipProvider>
                 </ThemeProvider>
@@ -104,6 +107,8 @@ export async function runSelectionContent(ctx: ContentScriptContext) {
   ctx.onInvalidated(() => {
     window.__READ_FROG_SELECTION_INJECTED__ = false
     clearEffectiveSiteControlUrl()
+    // The glosses are this script's: the next one draws its own.
+    disposeAnnotationController()
   })
 
   // Check global site control

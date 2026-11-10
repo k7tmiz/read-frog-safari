@@ -34,6 +34,36 @@ vi.mock("../more-menu", () => ({
   SelectionToolbarMoreMenu: () => <button type="button" data-testid="more-menu" />,
 }))
 
+// The slot follows its switch in the config, like the real hook.
+vi.mock("../../annotation/provider", async () => {
+  const jotai = await import("jotai")
+  const configAtoms = await import("@/utils/atoms/config")
+  return {
+    useAnnotation: () => {
+      const selectionToolbar = jotai.useAtomValue(configAtoms.configFieldsAtomMap.selectionToolbar)
+      return {
+        enabled: selectionToolbar.enabled && (selectionToolbar.annotation?.enabled ?? false),
+        mode: false,
+        setMode: vi.fn<(mode: boolean) => void>(),
+        count: 0,
+        annotate: vi.fn<() => boolean>(),
+      }
+    },
+  }
+})
+
+vi.mock("../../annotation/toolbar-slot", () => ({
+  AnnotateButton: () => null,
+  AnnotateReveal: () => null,
+  useAnnotateReveal: () => ({
+    open: false,
+    placement: "left",
+    openReveal: vi.fn<() => void>(),
+    scheduleClose: vi.fn<() => void>(),
+    cancelClose: vi.fn<() => void>(),
+  }),
+}))
+
 // Mock atoms
 vi.mock("@/utils/atoms/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/utils/atoms/config")>()
@@ -53,6 +83,7 @@ vi.mock("@/utils/atoms/config", async (importOriginal) => {
           },
           speak: { enabled: true },
         },
+        annotation: { enabled: true, shortcut: "Alt+Shift+E" },
         customActions: [],
       }),
     },
@@ -278,6 +309,7 @@ describe("selectionToolbar - isInputOrTextarea logic", () => {
         },
         speak: { ...DEFAULT_SELECTION_TOOLBAR_CONFIG.features.speak, enabled: false },
       },
+      annotation: { enabled: false },
       builtInActions: {
         dictionary: {
           enabled: false,
@@ -446,6 +478,65 @@ describe("selectionToolbar - isInputOrTextarea logic", () => {
 
     await triggerMouseUpWithSelection(screen.getByTestId("test-element"))
     await waitFor(() => expectToolbarVisible())
+  })
+
+  it("records the page the text was selected on as the session's note origin", async () => {
+    window.history.replaceState(null, "", "/articles/frogs?page=2")
+    document.title = "  Frogs  "
+    render(
+      <div>
+        <SelectionToolbar />
+        <div data-testid="test-element">Some text</div>
+      </div>,
+    )
+
+    await clearToolbarState()
+
+    await triggerMouseUpWithSelection(screen.getByTestId("test-element"))
+    await waitFor(() => expectToolbarVisible())
+
+    expect(getDefaultStore().get(selectionSessionAtom)?.noteOrigin).toEqual({
+      kind: "webpage",
+      url: `${window.location.origin}/articles/frogs?page=2`,
+      title: "Frogs",
+    })
+  })
+
+  it("opens and records the page in Firefox content scripts too (#2470)", async () => {
+    // Firefox content scripts see the page's URL objects through Xray wrappers,
+    // where the iterators `searchParams` methods return have no Symbol.iterator.
+    const searchParamsPrototype = Object.getPrototypeOf(
+      new URL("https://example.com/").searchParams,
+    )
+    const iteratorSpies = (["keys", "values", "entries"] as const).map((method) =>
+      vi.spyOn(searchParamsPrototype, method).mockImplementation(() => ({
+        next: () => ({ done: true, value: undefined }),
+      })),
+    )
+    window.history.replaceState(null, "", "/articles/frogs?token=secret&page=2")
+    document.title = "Frogs"
+
+    try {
+      render(
+        <div>
+          <SelectionToolbar />
+          <div data-testid="test-element">Some text</div>
+        </div>,
+      )
+
+      await clearToolbarState()
+
+      await triggerMouseUpWithSelection(screen.getByTestId("test-element"))
+      await waitFor(() => expectToolbarVisible())
+
+      expect(getDefaultStore().get(selectionSessionAtom)?.noteOrigin).toEqual({
+        kind: "webpage",
+        url: `${window.location.origin}/articles/frogs?page=2`,
+        title: "Frogs",
+      })
+    } finally {
+      for (const spy of iteratorSpies) spy.mockRestore()
+    }
   })
 
   it("should keep the toolbar visible on right-click so context menu translation can reuse the selection", async () => {
